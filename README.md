@@ -1,2 +1,2 @@
-# NursingApp
+# Doe Nurse Scheduler
 
