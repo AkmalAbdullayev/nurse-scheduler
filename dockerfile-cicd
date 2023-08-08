@@ -1,0 +1,19 @@
+FROM php:8.1-apache-bullseye
+
+WORKDIR /app
+
+COPY / /app
+RUN apt-get update && apt-get install -y \
+     libpq-dev libpng-dev libzip-dev libfreetype6-dev libjpeg62-turbo-dev libwebp-dev zip\
+    && rm -rf /var/lib/apt/lists/* \
+    && docker-php-ext-configure pgsql -with-pgsql=/usr/local/pgsql \
+    && docker-php-ext-install pgsql pdo_pgsql \
+    && docker-php-ext-configure gd --enable-gd --with-freetype --with-jpeg --with-webp \
+    && docker-php-ext-install -j$(nproc) gd \
+    && docker-php-ext-install zip \
+    && a2enmod rewrite \
+    && mv /app/vhost.conf /etc/apache2/sites-available/000-default.conf \
+    && cd /app; php artisan storage:link \
+    && chown -R www-data:www-data /app
+
+EXPOSE 80

@@ -1,0 +1,154 @@
+workflow:
+  rules:
+    - if: $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_COMMIT_BRANCH == "master"
+    - if: $CI_PIPELINE_SOURCE == "web"
+
+cache:
+  paths:
+    - ./vendor
+  key: "$CI_BUILD_REF_NAME"
+
+
+stages:
+  - dependency
+  # - lint
+  - migration
+#  - seed
+  # - test
+  - deploy
+
+#----------------------------------------
+.default_job:stage:
+  rules: &rules_stage
+    - if: $CI_COMMIT_BRANCH == "master"
+  environment: &environment_stage
+    name: stage
+
+.default_job:development:
+  rules: &rules_development
+    - if: $CI_COMMIT_BRANCH == "develop"
+  environment: &environment_development
+    name: development
+
+#----------------------------------------
+.php_template: &php_template
+  tags:
+      - shell
+      - php
+
+#----------------------------------------
+dependency:
+  stage: dependency
+  <<: *php_template
+  script:
+    - composer update
+
+#----------------------------------------
+# lint:lint:
+#   stage: lint
+#   <<: *php_template
+#   script:
+#     - echo "php linter"
+
+#----------------------------------------
+.migration_template: &migration_template
+  stage: migration
+  <<: *php_template
+  script:
+    - php artisan migrate --force
+
+migration:stage:
+  <<: *migration_template
+  rules: *rules_stage
+  environment: *environment_stage
+
+migration:development:
+  <<: *migration_template
+  rules: *rules_development
+  environment: *environment_development
+
+#----------------------------------------
+#.seed_template: &seed_template
+#  stage: seed
+#  <<: *php_template
+#  allow_failure: true
+#  script:
+#    - php artisan db:seed --force
+#
+#seed:stage:
+#  <<: *seed_template
+#  rules: *rules_stage
+#  environment: *environment_stage
+#
+#seed:development:
+#  <<: *seed_template
+#  rules: *rules_development
+#  environment: *environment_development
+
+#----------------------------------------
+# .test_template: &test_template
+#   stage: test
+#   <<: *php_template
+#   script:
+#     - php artisan test
+
+# test:stage:
+#   <<: *test_template
+#   rules: *rules_stage
+#   environment: *environment_stage
+
+# test:development:
+#   <<: *test_template
+#   rules: *rules_development
+#   environment: *environment_development
+
+#----------------------------------------
+.base_template: &base_template
+  tags:
+    - shell
+    - docker
+
+# lint:dockerfile:
+#   stage: lint
+#   <<: *base_template
+#   script:
+#     - docker build -t test:test -f dockerfile-cicd .
+#     - docker rmi test:test
+
+# lint:docker-stack:
+#   stage: lint
+#   <<: *base_template
+#   script:
+#     - echo "YAML linter"
+
+#----------------------------------------
+.deploy_template: &deploy_template
+  stage: deploy
+  <<: *base_template
+  script:
+    - >
+      docker login
+      -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+
+      docker build
+      -t $CI_REGISTRY/$CI_PROJECT_PATH:${CI_COMMIT_SHORT_SHA}
+      -f dockerfile-cicd
+      .
+
+      docker push
+      $CI_REGISTRY/$CI_PROJECT_PATH:${CI_COMMIT_SHORT_SHA}
+
+      docker stack deploy --with-registry-auth
+      -c docker-stack.yml
+      ${CI_PROJECT_NAME}-${CI_ENVIRONMENT_NAME}
+
+deploy:stage:
+  <<: *deploy_template
+  rules: *rules_stage
+  environment: *environment_stage
+
+deploy:development:
+  <<: *deploy_template
+  rules: *rules_development
+  environment: *environment_development
